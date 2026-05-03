@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>習慣管理プロトタイプ</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f7fa;
+        }
+
+        .card {
+            background: white;
+            padding: 40px 60px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+
+        .goal-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 40px;
+        }
+
+        .action-button {
+            height: 60px;
+            min-width: 200px;
+            padding: 0 40px;
+            font-size: 20px;
+            font-weight: bold;
+            color: white;
+            background-color: #9e9e9e; /* 指定されたグレー */
+            border: none;
+            border-radius: 30px; /* 少し丸みを持たせてモダンに */
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .action-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* 達成後のスタイル（指定されたオレンジ） */
+        .action-button.completed {
+            background-color: #ff8c00; 
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        /* カレンダーのスタイル */
+        .calendar-container {
+            width: 90%;
+            max-width: 400px;
+            margin-top: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            box-sizing: border-box;
+        }
+
+        .calendar-header {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+            text-align: center;
+        }
+
+        .calendar-day-label {
+            font-size: 12px;
+            color: #9e9e9e;
+            padding-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .calendar-day {
+            aspect-ratio: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            color: #2c3e50;
+            border-radius: 8px;
+            position: relative;
+            background-color: #fafafa;
+        }
+
+        .calendar-day.today {
+            background-color: #fff4e5;
+            font-weight: bold;
+            color: #ff8c00;
+            border: 1px solid #ff8c00;
+        }
+
+        .star-mark {
+            position: absolute;
+            font-size: 12px;
+            color: #ff8c00;
+            top: 2px;
+            right: 2px;
+            animation: starPop 0.3s ease-out;
+        }
+
+        @keyframes starPop {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="goal-text">今日の目標：筋トレ10分</div>
+        <button id="completeBtn" class="action-button">完了</button>
+    </div>
+
+    <div id="calendar" class="calendar-container">
+        <div id="calendarMonth" class="calendar-header"></div>
+        <div class="calendar-grid">
+            <div class="calendar-day-label">日</div>
+            <div class="calendar-day-label">月</div>
+            <div class="calendar-day-label">火</div>
+            <div class="calendar-day-label">水</div>
+            <div class="calendar-day-label">木</div>
+            <div class="calendar-day-label">金</div>
+            <div class="calendar-day-label">土</div>
+        </div>
+        <div id="calendarDays" class="calendar-grid">
+            <!-- 日付がここに挿入されます -->
+        </div>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'habit_tracker_history';
+        const btn = document.getElementById('completeBtn');
+
+        // 日付を YYYY-MM-DD 形式の文字列で取得する
+        function formatDate(year, month, day) {
+            return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
+
+        // LocalStorage から記録を取得する
+        function getHistory() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        }
+
+        // 記録を保存する
+        function saveDate(dateStr) {
+            const history = getHistory();
+            if (!history.includes(dateStr)) {
+                history.push(dateStr);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+            }
+        }
+
+        // ボタンの状態を「達成済み」にする
+        function setButtonCompleted() {
+            btn.classList.add('completed');
+            btn.textContent = '達成済み！';
+            btn.disabled = true; 
+            btn.style.cursor = 'default';
+        }
+
+        // ボタンの状態を「未達成」に戻す
+        function resetButton() {
+            btn.classList.remove('completed');
+            btn.textContent = '完了';
+            btn.disabled = false;
+            btn.style.cursor = 'pointer';
+        }
+
+        // 星マークを生成する
+        function createStarElement() {
+            const star = document.createElement('span');
+            star.classList.add('star-mark');
+            star.textContent = '★';
+            return star;
+        }
+
+        btn.addEventListener('click', function() {
+            const now = new Date();
+            const dateStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
+
+            // 1. ボタンの状態変更
+            setButtonCompleted();
+
+            // 2. LocalStorage へ保存
+            saveDate(dateStr);
+
+            // 3. カレンダーへ反映
+            const todayCell = document.getElementById('today-cell');
+            if (todayCell && !todayCell.querySelector('.star-mark')) {
+                todayCell.appendChild(createStarElement());
+            }
+        });
+
+        function renderCalendar() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const today = now.getDate();
+            const history = getHistory();
+
+            document.getElementById('calendarMonth').textContent = `${year}年${month + 1}月`;
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const lastDate = new Date(year, month + 1, 0).getDate();
+
+            const daysContainer = document.getElementById('calendarDays');
+            daysContainer.innerHTML = '';
+
+            // 空白のセル
+            for (let i = 0; i < firstDay; i++) {
+                const emptyDiv = document.createElement('div');
+                emptyDiv.classList.add('calendar-day');
+                emptyDiv.style.backgroundColor = 'transparent';
+                daysContainer.appendChild(emptyDiv);
+            }
+
+            // 日付セル
+            for (let d = 1; d <= lastDate; d++) {
+                const dayDiv = document.createElement('div');
+                dayDiv.classList.add('calendar-day');
+                dayDiv.textContent = d;
+                
+                const dateStr = formatDate(year, month, d);
+
+                // 過去の記録があれば★を表示（ボタンの状態に関わらず保持）
+                if (history.includes(dateStr)) {
+                    dayDiv.appendChild(createStarElement());
+                }
+                
+                if (d === today) {
+                    dayDiv.classList.add('today');
+                    dayDiv.id = 'today-cell';
+                }
+                
+                daysContainer.appendChild(dayDiv);
+            }
+        }
+
+        // アプリ起動時の初期化処理
+        function initializeApp() {
+            const now = new Date();
+            const todayStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
+            const history = getHistory();
+            
+            // 履歴の最後（最新）の日付を取得
+            const lastAchievement = history.length > 0 ? history[history.length - 1] : null;
+
+            // 日付チェック：今日の日付と最終達成日が異なれば未達成状態にする
+            if (lastAchievement === todayStr) {
+                setButtonCompleted();
+            } else {
+                // 翌日になっている、または今日が未達成の場合
+                resetButton();
+            }
+
+            // カレンダー描画（過去の★マークは履歴データから描画される）
+            renderCalendar();
+        }
+
+        // 実行
+        initializeApp();
+    </script>
+</body>
+</html>
