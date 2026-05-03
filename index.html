@@ -103,7 +103,8 @@
         }
 
         .calendar-day {
-            aspect-ratio: 1;
+            width: 44px; /* マス目を 40px 以上に拡大 */
+            height: 44px; /* マス目を 40px 以上に拡大 */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -118,12 +119,12 @@
             background-color: #fff4e5;
             font-weight: bold;
             color: #ff8c00;
-            border: 1px solid #ff8c00;
+            border: 2px solid #ff8c00; /* 枠線を少し太く */
         }
 
         .star-mark {
             position: absolute;
-            font-size: 12px;
+            font-size: 14px;
             color: #ff8c00;
             top: 2px;
             right: 2px;
@@ -134,13 +135,85 @@
             0% { transform: scale(0); opacity: 0; }
             100% { transform: scale(1); opacity: 1; }
         }
+
+        /* カードの相対配置（設定ボタンのため） */
+        .card {
+            position: relative;
+            background: white;
+            padding: 40px 60px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+            box-sizing: border-box;
+        }
+
+        /* 設定ボタンとモーダル */
+        .settings-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        .settings-btn:hover { opacity: 1; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            width: 80%;
+            max-width: 300px;
+            text-align: center;
+        }
+        .modal-content h3 { margin-top: 0; color: #2c3e50; }
+        #goalInput {
+            width: 100%;
+            padding: 10px;
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        .modal-buttons { display: flex; gap: 10px; justify-content: center; }
+        .save-btn { background: #ff8c00; color: white; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        .cancel-btn { background: #eee; color: #666; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div class="card">
-        <div class="goal-text">今日の目標：筋トレ10分</div>
+        <button id="settingsBtn" class="settings-btn">⚙️</button>
+        <div id="goalDisplay" class="goal-text">今日の目標：筋トレ10分</div>
         <button id="completeBtn" class="action-button">完了</button>
+    </div>
+
+    <!-- 設定モーダル -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <h3>目標の設定</h3>
+            <input type="text" id="goalInput" placeholder="新しい目標を入力...">
+            <div class="modal-buttons">
+                <button id="saveGoalBtn" class="save-btn">保存</button>
+                <button id="closeModalBtn" class="cancel-btn">閉じる</button>
+            </div>
+        </div>
     </div>
 
     <div id="calendar" class="calendar-container">
@@ -161,7 +234,12 @@
 
     <script>
         const STORAGE_KEY = 'habit_tracker_history';
+        const GOAL_KEY = 'habit_tracker_goal';
+        
         const btn = document.getElementById('completeBtn');
+        const goalDisplay = document.getElementById('goalDisplay');
+        const settingsModal = document.getElementById('settingsModal');
+        const goalInput = document.getElementById('goalInput');
 
         // 日付を YYYY-MM-DD 形式の文字列で取得する
         function formatDate(year, month, day) {
@@ -183,19 +261,24 @@
             }
         }
 
+        // 記録を削除する（取り消し用）
+        function removeDate(dateStr) {
+            let history = getHistory();
+            history = history.filter(d => d !== dateStr);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        }
+
         // ボタンの状態を「達成済み」にする
         function setButtonCompleted() {
             btn.classList.add('completed');
             btn.textContent = '達成済み！';
-            btn.disabled = true; 
-            btn.style.cursor = 'default';
+            btn.style.cursor = 'pointer'; // 再度押せるようにする
         }
 
         // ボタンの状態を「未達成」に戻す
         function resetButton() {
             btn.classList.remove('completed');
             btn.textContent = '完了';
-            btn.disabled = false;
             btn.style.cursor = 'pointer';
         }
 
@@ -207,21 +290,56 @@
             return star;
         }
 
+        // メインボタンのクリックイベント
         btn.addEventListener('click', function() {
             const now = new Date();
             const dateStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
+            const history = getHistory();
 
-            // 1. ボタンの状態変更
-            setButtonCompleted();
-
-            // 2. LocalStorage へ保存
-            saveDate(dateStr);
-
-            // 3. カレンダーへ反映
-            const todayCell = document.getElementById('today-cell');
-            if (todayCell && !todayCell.querySelector('.star-mark')) {
-                todayCell.appendChild(createStarElement());
+            if (history.includes(dateStr)) {
+                // 既成済みの場合、取り消し確認
+                if (confirm('今日の達成を取り消して「未達成」に戻しますか？')) {
+                    removeDate(dateStr);
+                    resetButton();
+                    renderCalendar();
+                }
+            } else {
+                // 未達成の場合、達成処理
+                setButtonCompleted();
+                saveDate(dateStr);
+                const todayCell = document.getElementById('today-cell');
+                if (todayCell && !todayCell.querySelector('.star-mark')) {
+                    todayCell.appendChild(createStarElement());
+                }
             }
+        });
+
+        // 目標の保存と反映
+        function saveGoal(text) {
+            localStorage.setItem(GOAL_KEY, text);
+            goalDisplay.textContent = text;
+        }
+
+        function loadGoal() {
+            const savedGoal = localStorage.getItem(GOAL_KEY);
+            if (savedGoal) {
+                goalDisplay.textContent = savedGoal;
+                goalInput.value = savedGoal;
+            } else {
+                goalInput.value = goalDisplay.textContent;
+            }
+        }
+
+        // 設定モーダルの制御
+        document.getElementById('settingsBtn').addEventListener('click', () => {
+            settingsModal.style.display = 'flex';
+        });
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            settingsModal.style.display = 'none';
+        });
+        document.getElementById('saveGoalBtn').addEventListener('click', () => {
+            saveGoal(goalInput.value);
+            settingsModal.style.display = 'none';
         });
 
         function renderCalendar() {
@@ -255,7 +373,7 @@
                 
                 const dateStr = formatDate(year, month, d);
 
-                // 過去の記録があれば★を表示（ボタンの状態に関わらず保持）
+                // 過去の記録があれば★を表示
                 if (history.includes(dateStr)) {
                     dayDiv.appendChild(createStarElement());
                 }
@@ -275,22 +393,19 @@
             const todayStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
             const history = getHistory();
             
-            // 履歴の最後（最新）の日付を取得
+            loadGoal(); // 目標の読み込み
+
             const lastAchievement = history.length > 0 ? history[history.length - 1] : null;
 
-            // 日付チェック：今日の日付と最終達成日が異なれば未達成状態にする
-            if (lastAchievement === todayStr) {
+            if (history.includes(todayStr)) {
                 setButtonCompleted();
             } else {
-                // 翌日になっている、または今日が未達成の場合
                 resetButton();
             }
 
-            // カレンダー描画（過去の★マークは履歴データから描画される）
             renderCalendar();
         }
 
-        // 実行
         initializeApp();
     </script>
 </body>
